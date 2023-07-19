@@ -29,64 +29,62 @@ void FBUITweenInstance::Begin()
 	ScaleProp.OnBegin( pWidget->GetRenderTransform().Scale );
 	RotationProp.OnBegin( pWidget->GetRenderTransform().Angle );
 	OpacityProp.OnBegin( pWidget->GetRenderOpacity() );
-
-	{
-		UUserWidget* UW = Cast<UUserWidget>( pWidget );
-		if ( UW )
-		{
-			ColorProp.OnBegin( UW->GetColorAndOpacity() );
-		}
-		UImage* UI = Cast<UImage>( pWidget );
-		if ( UI )
-		{
-			ColorProp.OnBegin( UI->GetColorAndOpacity() );
-		}
-		UBorder* Border = Cast<UBorder>( pWidget );
-		if ( Border )
-		{
-			ColorProp.OnBegin( Border->GetContentColorAndOpacity() );
-		}
-	}
-
 	VisibilityProp.OnBegin( pWidget->GetVisibility() );
 
-	UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>( pWidget->Slot );
-	if ( CanvasSlot )
+	if ( UUserWidget* UW = Cast<UUserWidget>( pWidget ) )
+	{
+		ColorProp.OnBegin( UW->GetColorAndOpacity() );
+	}
+	else if ( UImage* UI = Cast<UImage>( pWidget ) )
+	{
+		ColorProp.OnBegin( UI->GetColorAndOpacity() );
+	}
+	else if ( UBorder* Border = Cast<UBorder>( pWidget ) )
+	{
+		ColorProp.OnBegin( Border->GetContentColorAndOpacity() );
+	}
+	else
+	{
+		UE_LOG(LogBUITween, Error, TEXT("FBUITweenInstance::Begin: Wrong setup or unimplemented, ColorProp in %s"), *pWidget->GetName());
+		ColorProp.Unset();
+	}
+
+	if ( UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>( pWidget->Slot ) )
 	{
 		CanvasPositionProp.OnBegin( CanvasSlot->GetPosition() );
 	}
-	UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>( pWidget->Slot );
-	UHorizontalBoxSlot* HorizontalBoxSlot = Cast<UHorizontalBoxSlot>( pWidget->Slot );
-	UVerticalBoxSlot* VerticalBoxSlot = Cast<UVerticalBoxSlot>( pWidget->Slot );
-	if ( OverlaySlot )
+
+	const auto GetPaddingAsVector4 = [](auto Slot) -> FVector4
 	{
-		PaddingProp.OnBegin( FVector4(
-			OverlaySlot->GetPadding().Left,
-			OverlaySlot->GetPadding().Top,
-			OverlaySlot->GetPadding().Bottom,
-			OverlaySlot->GetPadding().Right ) );
+		return FVector4(
+			Slot->GetPadding().Left,
+			Slot->GetPadding().Top,
+			Slot->GetPadding().Bottom,
+			Slot->GetPadding().Right );
+	};
+
+	if ( UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>( pWidget->Slot ) )
+	{
+		PaddingProp.OnBegin( GetPaddingAsVector4( OverlaySlot ) );
 	}
-	else if ( HorizontalBoxSlot )
+	else if ( UHorizontalBoxSlot* HorizontalBoxSlot = Cast<UHorizontalBoxSlot>( pWidget->Slot ) )
 	{
-		PaddingProp.OnBegin( FVector4(
-			HorizontalBoxSlot->GetPadding().Left,
-			HorizontalBoxSlot->GetPadding().Top,
-			HorizontalBoxSlot->GetPadding().Bottom,
-			HorizontalBoxSlot->GetPadding().Right ) );
+		PaddingProp.OnBegin( GetPaddingAsVector4( HorizontalBoxSlot ) );
 	}
-	else if ( VerticalBoxSlot )
+	else if ( UVerticalBoxSlot* VerticalBoxSlot = Cast<UVerticalBoxSlot>( pWidget->Slot ) )
 	{
-		PaddingProp.OnBegin( FVector4(
-			VerticalBoxSlot->GetPadding().Left,
-			VerticalBoxSlot->GetPadding().Top,
-			VerticalBoxSlot->GetPadding().Bottom,
-			VerticalBoxSlot->GetPadding().Right ) );
+		PaddingProp.OnBegin( GetPaddingAsVector4( VerticalBoxSlot ) );
+	}
+	else
+	{
+		UE_LOG(LogBUITween, Error, TEXT("FBUITweenInstance::Begin: Wrong setup or unimplemented, PaddingProp in %s"), *pWidget->GetName());
+		PaddingProp.Unset();
 	}
 
-	USizeBox* SizeBox = Cast<USizeBox>( pWidget );
-	if ( SizeBox )
+	if ( USizeBox* SizeBox = Cast<USizeBox>( pWidget ) )
 	{
 		MaxDesiredHeightProp.OnBegin( SizeBox->GetMaxDesiredHeight() );
+		WidthOverrideProp.OnBegin( SizeBox->GetWidthOverride() );
 	}
 
 	// Apply the starting conditions, even if we delay
@@ -138,97 +136,91 @@ void FBUITweenInstance::Apply( float EasedAlpha )
 {
 	UWidget* Target = pWidget.Get();
 
-	if ( ColorProp.IsSet() )
+	if ( ColorProp.IsSet() && ColorProp.Update( EasedAlpha ) )
 	{
-		ColorProp.Update( EasedAlpha );
-		UUserWidget* UW = Cast<UUserWidget>( Target );
-		if ( UW )
+		if ( UUserWidget* UW = Cast<UUserWidget>( Target ) )
 		{
 			UW->SetColorAndOpacity( ColorProp.CurrentValue );
 		}
-		UImage* UI = Cast<UImage>( Target );
-		if ( UI )
+		else if ( UImage* UI = Cast<UImage>( Target ) )
 		{
 			UI->SetColorAndOpacity( ColorProp.CurrentValue );
 		}
-		UBorder* Border = Cast<UBorder>( Target );
-		if ( Border )
+		else if ( UBorder* Border = Cast<UBorder>( Target ) )
 		{
 			Border->SetContentColorAndOpacity( ColorProp.CurrentValue );
 		}
 	}
 
-	if ( OpacityProp.IsSet() )
+	if ( OpacityProp.IsSet() && OpacityProp.Update( EasedAlpha ) )
 	{
-		OpacityProp.Update( EasedAlpha );
 		Target->SetRenderOpacity( OpacityProp.CurrentValue );
 	}
 
 	// Only apply visibility changes at 0 or 1
-	if ( VisibilityProp.IsSet() )
+	if ( VisibilityProp.IsSet() && VisibilityProp.Update( EasedAlpha ) )
 	{
-		if ( VisibilityProp.Update( EasedAlpha ) )
-		{
-			Target->SetVisibility( VisibilityProp.CurrentValue );
-		}
+		Target->SetVisibility( VisibilityProp.CurrentValue );
 	}
 
 	bool bChangedRenderTransform = false;
 	FWidgetTransform CurrentTransform = Target->GetRenderTransform();
 
-	if ( TranslationProp.IsSet() )
+	if ( TranslationProp.IsSet() && TranslationProp.Update( EasedAlpha ) )
 	{
-		TranslationProp.Update( EasedAlpha );
 		CurrentTransform.Translation = TranslationProp.CurrentValue;
 		bChangedRenderTransform = true;
 	}
-	if ( ScaleProp.IsSet() )
+
+	if ( ScaleProp.IsSet() && ScaleProp.Update( EasedAlpha ) )
 	{
-		ScaleProp.Update( EasedAlpha );
 		CurrentTransform.Scale = ScaleProp.CurrentValue;
 		bChangedRenderTransform = true;
 	}
-	if ( RotationProp.IsSet() )
+
+	if ( RotationProp.IsSet() && RotationProp.Update( EasedAlpha ) )
 	{
-		if ( RotationProp.Update( EasedAlpha ) )
+		CurrentTransform.Angle = RotationProp.CurrentValue;
+		bChangedRenderTransform = true;
+	}
+
+	if ( CanvasPositionProp.IsSet() && CanvasPositionProp.Update( EasedAlpha ) )
+	{
+		if ( UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>( pWidget->Slot ) )
 		{
-			CurrentTransform.Angle = RotationProp.CurrentValue;
-			bChangedRenderTransform = true;
+			CanvasSlot->SetPosition( CanvasPositionProp.CurrentValue );
 		}
 	}
-	if ( CanvasPositionProp.IsSet() )
+
+	if ( PaddingProp.IsSet() && PaddingProp.Update( EasedAlpha ) )
 	{
-		if ( CanvasPositionProp.Update( EasedAlpha ) )
+		if ( UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>(pWidget->Slot) )
 		{
-			UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>( pWidget->Slot );
-			if ( CanvasSlot )
-				CanvasSlot->SetPosition( CanvasPositionProp.CurrentValue );
+			OverlaySlot->SetPadding( PaddingProp.CurrentValue );
+		}
+		else if ( UHorizontalBoxSlot* HorizontalBoxSlot = Cast<UHorizontalBoxSlot>(pWidget->Slot) )
+		{
+			HorizontalBoxSlot->SetPadding( PaddingProp.CurrentValue );
+		}
+		else if ( UVerticalBoxSlot* VerticalBoxSlot = Cast<UVerticalBoxSlot>(pWidget->Slot) )
+		{
+			VerticalBoxSlot->SetPadding( PaddingProp.CurrentValue );
 		}
 	}
-	if ( PaddingProp.IsSet() )
+
+	if ( MaxDesiredHeightProp.IsSet() && MaxDesiredHeightProp.Update( EasedAlpha ) )
 	{
-		if ( PaddingProp.Update( EasedAlpha ) )
+		if ( USizeBox* SizeBox = Cast<USizeBox>( pWidget ) )
 		{
-			UOverlaySlot* OverlaySlot = Cast<UOverlaySlot>( pWidget->Slot );
-			UHorizontalBoxSlot* HorizontalBoxSlot = Cast<UHorizontalBoxSlot>( pWidget->Slot );
-			UVerticalBoxSlot* VerticalBoxSlot = Cast<UVerticalBoxSlot>( pWidget->Slot );
-			if ( OverlaySlot )
-				OverlaySlot->SetPadding( PaddingProp.CurrentValue );
-			else if ( HorizontalBoxSlot )
-				HorizontalBoxSlot->SetPadding( PaddingProp.CurrentValue );
-			else if ( VerticalBoxSlot )
-				VerticalBoxSlot->SetPadding( PaddingProp.CurrentValue );
+			SizeBox->SetMaxDesiredHeight( MaxDesiredHeightProp.CurrentValue );
 		}
 	}
-	if ( MaxDesiredHeightProp.IsSet() )
+
+	if ( WidthOverrideProp.IsSet() && WidthOverrideProp.Update( EasedAlpha ) )
 	{
-		if ( MaxDesiredHeightProp.Update( EasedAlpha ) )
+		if ( USizeBox* SizeBox = Cast<USizeBox>( pWidget ) )
 		{
-			USizeBox* SizeBox = Cast<USizeBox>( pWidget );
-			if ( SizeBox )
-			{
-				SizeBox->SetMaxDesiredHeight( MaxDesiredHeightProp.CurrentValue );
-			}
+			SizeBox->SetWidthOverride( WidthOverrideProp.CurrentValue );
 		}
 	}
 

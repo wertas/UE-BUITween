@@ -15,11 +15,15 @@ class TBUITweenProp
 public:
 	bool bHasStart = false;
 	bool bHasTarget = false;
-	inline bool IsSet() const { return bHasStart || bHasTarget; }
+	bool bIsFirstTime = true;
+
 	T StartValue;
 	T TargetValue;
 	T CurrentValue;
-	bool bIsFirstTime = true;
+
+	inline bool IsSet() const { return bHasStart || bHasTarget; }
+	void Unset() { bHasStart = false; bHasTarget = false; }
+	
 	void SetStart( T InStart )
 	{
 		bHasStart = true;
@@ -55,11 +59,15 @@ class TBUITweenInstantProp
 public:
 	bool bHasStart = false;
 	bool bHasTarget = false;
-	inline bool IsSet() const { return bHasStart || bHasTarget; }
+	bool bIsFirstTime = true;
+
 	T StartValue;
 	T TargetValue;
 	T CurrentValue;
-	bool bIsFirstTime = true;
+
+	inline bool IsSet() const { return bHasStart || bHasTarget; }
+	void Unset() { bHasStart = false; bHasTarget = false; }
+	
 	void SetStart( T InStart )
 	{
 		bHasStart = true;
@@ -110,8 +118,8 @@ public:
 		, Delay( InDelay )
 	{
 		ensure( pInWidget != nullptr );
-
 	}
+
 	void Begin();
 	void Update( float InDeltaTime );
 	void Apply( float EasedAlpha );
@@ -130,21 +138,31 @@ public:
 		return *this;
 	}
 
+	// Is used in blueprints after calling Easing
+	FBUITweenInstance& SetEasingOptionalParam( float InEasingParam)
+	{
+		EasingParam = InEasingParam;
+		return *this;
+	}
+
 	FBUITweenInstance& ToTranslation( const FVector2D& InTarget )
 	{
 		TranslationProp.SetTarget( InTarget );
 		return *this;
 	}
+
 	FBUITweenInstance& ToTranslation( float X, float Y )
 	{
 		TranslationProp.SetTarget( FVector2D( X, Y ) );
 		return *this;
 	}
+
 	FBUITweenInstance& FromTranslation( const FVector2D& InStart )
 	{
 		TranslationProp.SetStart( InStart );
 		return *this;
 	}
+
 	FBUITweenInstance& FromTranslation( float X, float Y )
 	{
 		TranslationProp.SetStart( FVector2D( X, Y ) );
@@ -156,6 +174,7 @@ public:
 		ScaleProp.SetTarget( InTarget );
 		return *this;
 	}
+
 	FBUITweenInstance& FromScale( const FVector2D& InStart )
 	{
 		ScaleProp.SetStart( InStart );
@@ -167,6 +186,7 @@ public:
 		OpacityProp.SetTarget( InTarget );
 		return *this;
 	}
+
 	FBUITweenInstance& FromOpacity( float InStart )
 	{
 		OpacityProp.SetStart( InStart );
@@ -178,6 +198,7 @@ public:
 		ColorProp.SetTarget( InTarget );
 		return *this;
 	}
+
 	FBUITweenInstance& FromColor( const FLinearColor& InStart )
 	{
 		ColorProp.SetStart( InStart );
@@ -189,29 +210,44 @@ public:
 		RotationProp.SetTarget( InTarget );
 		return *this;
 	}
+
 	FBUITweenInstance& FromRotation( float InStart )
 	{
 		RotationProp.SetStart( InStart );
 		return *this;
 	}
 
-	FBUITweenInstance& ToMaxDesiredHeight( float InTarget )
+	FBUITweenInstance& ToSizeBoxMaxDesiredHeight( float InTarget )
 	{
 		MaxDesiredHeightProp.SetTarget( InTarget );
 		return *this;
 	}
-	FBUITweenInstance& FromMaxDesiredHeight( float InStart )
+
+	FBUITweenInstance& FromSizeBoxMaxDesiredHeight( float InStart )
 	{
 		MaxDesiredHeightProp.SetStart( InStart );
 		return *this;
 	}
 
-	FBUITweenInstance& ToCanvasPosition( FVector2D InTarget )
+	FBUITweenInstance& ToSizeBoxWidthOverride( float InTarget )
+	{
+		WidthOverrideProp.SetTarget( InTarget );
+		return *this;
+	}
+
+	FBUITweenInstance& FromSizeBoxWidthOverride( float InStart )
+	{
+		WidthOverrideProp.SetStart( InStart );
+		return *this;
+	}
+
+	FBUITweenInstance& ToCanvasPosition( const FVector2D& InTarget )
 	{
 		CanvasPositionProp.SetTarget( InTarget );
 		return *this;
 	}
-	FBUITweenInstance& FromCanvasPosition( FVector2D InStart )
+
+	FBUITweenInstance& FromCanvasPosition( const FVector2D& InStart )
 	{
 		CanvasPositionProp.SetStart( InStart );
 		return *this;
@@ -222,18 +258,19 @@ public:
 		PaddingProp.SetTarget( FVector4( InTarget.Left, InTarget.Top, InTarget.Right, InTarget.Bottom ) );
 		return *this;
 	}
+
 	FBUITweenInstance& FromPadding( const FMargin& InStart )
 	{
 		PaddingProp.SetStart( FVector4( InStart.Left, InStart.Top, InStart.Right, InStart.Bottom ) );
 		return *this;
 	}
 
-
 	FBUITweenInstance& ToVisibility( ESlateVisibility InTarget )
 	{
 		VisibilityProp.SetTarget( InTarget );
 		return *this;
 	}
+
 	FBUITweenInstance& FromVisibility( ESlateVisibility InStart )
 	{
 		VisibilityProp.SetStart( InStart );
@@ -245,6 +282,7 @@ public:
 		OnStartedDelegate = InOnStart;
 		return *this;
 	}
+
 	FBUITweenInstance& OnComplete( const FBUITweenSignature& InOnComplete )
 	{
 		OnCompleteDelegate = InOnComplete;
@@ -256,6 +294,7 @@ public:
 		OnStartedBPDelegate = InOnStart;
 		return *this;
 	}
+
 	FBUITweenInstance& OnComplete( const FBUITweenBPSignature& InOnComplete )
 	{
 		OnCompleteBPDelegate = InOnComplete;
@@ -285,8 +324,11 @@ public:
 	}
 
 protected:
+
 	bool bShouldUpdate = false;
 	bool bIsComplete = false;
+	bool bHasPlayedStartEvent = false;
+	bool bHasPlayedCompleteEvent = false;
 
 	TWeakObjectPtr<UWidget> pWidget = nullptr;
 	float Alpha = 0;
@@ -296,22 +338,29 @@ protected:
 	EBUIEasingType EasingType = EBUIEasingType::InOutQuad;
 	TOptional<float> EasingParam;
 
+	// Common UWidget properties
 	TBUITweenProp<FVector2D> TranslationProp;
-	TBUITweenProp<FVector2D> ScaleProp;
-	TBUITweenProp<FLinearColor> ColorProp;
-	TBUITweenProp<float> OpacityProp;
 	TBUITweenProp<float> RotationProp;
+	TBUITweenProp<FVector2D> ScaleProp;
+	TBUITweenProp<float> OpacityProp;
+	TBUITweenInstantProp<ESlateVisibility> VisibilityProp;
+
+	TBUITweenProp<FLinearColor> ColorProp;
+	
+	
 	TBUITweenProp<FVector2D> CanvasPositionProp;
 	TBUITweenProp<FVector4> PaddingProp; // FVector4 because FMath::Lerp does not support FMargin
-	TBUITweenInstantProp<ESlateVisibility> VisibilityProp;
-	TBUITweenProp<float> MaxDesiredHeightProp;
+	
 
+	// SizeBox
+	TBUITweenProp<float> MaxDesiredHeightProp;
+	TBUITweenProp<float> WidthOverrideProp;
+	
+	// Delegates
 	FBUITweenSignature OnStartedDelegate;
 	FBUITweenSignature OnCompleteDelegate;
-
 	FBUITweenBPSignature OnStartedBPDelegate;
 	FBUITweenBPSignature OnCompleteBPDelegate;
 
-	bool bHasPlayedStartEvent = false;
-	bool bHasPlayedCompleteEvent = false;
+	
 };

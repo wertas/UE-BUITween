@@ -94,3 +94,86 @@ void UBUITween::CompleteAll()
 	Update( 100000 );
 	Update( 100000 );
 }
+
+#define BUI_MAKE_INTERFACE_DEFINITION_OneParam(FunctionName, InType, OptionalModifier)											\
+UBUIParamChain* UBUITweenBlueprintFunctionLibrary::FunctionName(UBUIParamChain* Previous, const InType##OptionalModifier Value)	\
+{																																\
+	check(Previous && Previous->TweenInstance);																					\
+	Previous->TweenInstance->FunctionName(Value);																				\
+	return Previous;																											\
+}
+
+#define BUI_MAKE_INTERFACE_DEFINITION_ZeroParam(FunctionName)								\
+UBUIParamChain* UBUITweenBlueprintFunctionLibrary::FunctionName(UBUIParamChain* Previous)	\
+{																							\
+	check(Previous && Previous->TweenInstance);												\
+	Previous->TweenInstance->FunctionName();												\
+	return Previous;																		\
+}
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(Easing, EBUIEasingType,);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(SetEasingOptionalParam, float,);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(ToTranslation, FVector2D, &);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(FromTranslation, FVector2D, &);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(ToScale, FVector2D, &);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(FromScale, FVector2D, &);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(ToOpacity, float,);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(FromOpacity, float,);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(ToColor, FLinearColor, &);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(FromColor, FLinearColor, &);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(ToRotation, float,);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(FromRotation, float,);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(ToSizeBoxMaxDesiredHeight, float,);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(FromSizeBoxMaxDesiredHeight, float,);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(ToSizeBoxWidthOverride, float,);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(FromSizeBoxWidthOverride, float,);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(ToCanvasPosition, FVector2D, &);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(FromCanvasPosition, FVector2D, &);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(ToPadding, FMargin, &);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(FromPadding, FMargin, &);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(ToVisibility, ESlateVisibility,);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(FromVisibility, ESlateVisibility,);
+
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(OnStart, FBUITweenBPSignature, &);
+BUI_MAKE_INTERFACE_DEFINITION_OneParam(OnComplete, FBUITweenBPSignature, &);
+
+BUI_MAKE_INTERFACE_DEFINITION_ZeroParam(ToReset);
+
+#undef BUI_MAKE_INTERFACE_DEFINITION_OneParam
+#undef BUI_MAKE_INTERFACE_DEFINITION_ZeroParam
+
+
+
+#define BUI_CREATE_HELPER_CONDITIONAL_DEFINITIONS(Type, OptionalReference) \
+void UBUITweenBlueprintFunctionLibrary::SelectConditional_##Type(const Type##OptionalReference InFirst, const Type##OptionalReference InSecond, const bool bIsForward, Type& OutFirst, Type& OutSecond) \
+{									\
+	if (bIsForward)					\
+	{								\
+		OutFirst = InFirst;			\
+		OutSecond = InSecond;		\
+	}								\
+	else							\
+	{								\
+		Type Temp = InFirst; 		\
+		OutFirst = InSecond;		\
+		OutSecond = Temp;			\
+	}								\
+}
+
+BUI_CREATE_HELPER_CONDITIONAL_DEFINITIONS(float,)
+BUI_CREATE_HELPER_CONDITIONAL_DEFINITIONS(FVector2D, &)
+BUI_CREATE_HELPER_CONDITIONAL_DEFINITIONS(FLinearColor, &)
+BUI_CREATE_HELPER_CONDITIONAL_DEFINITIONS(FVector4, &)
+BUI_CREATE_HELPER_CONDITIONAL_DEFINITIONS(ESlateVisibility,)
+
+#undef BUI_CREATE_HELPER_CONDITIONAL_DEFINITIONS

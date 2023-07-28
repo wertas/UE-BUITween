@@ -99,6 +99,7 @@ void FBUITweenInstance::Update( float DeltaTime )
 	{
 		return;
 	}
+
 	if ( !pWidget.IsValid() )
 	{
 		bIsComplete = true;
@@ -138,30 +139,28 @@ void FBUITweenInstance::Apply( float EasedAlpha )
 {
 	UWidget* Target = pWidget.Get();
 
-	if ( ColorProp.IsSet() )
+	if ( ColorProp.IsSet() && ColorProp.Update( EasedAlpha ) )
 	{
-		ColorProp.Update( EasedAlpha );
 		UUserWidget* UW = Cast<UUserWidget>( Target );
 		if ( UW )
 		{
-			UW->SetColorAndOpacity( ColorProp.CurrentValue );
+			UW->SetColorAndOpacity( ColorProp.GetCurrentValue() );
 		}
 		UImage* UI = Cast<UImage>( Target );
 		if ( UI )
 		{
-			UI->SetColorAndOpacity( ColorProp.CurrentValue );
+			UI->SetColorAndOpacity( ColorProp.GetCurrentValue() );
 		}
 		UBorder* Border = Cast<UBorder>( Target );
 		if ( Border )
 		{
-			Border->SetContentColorAndOpacity( ColorProp.CurrentValue );
+			Border->SetContentColorAndOpacity( ColorProp.GetCurrentValue() );
 		}
 	}
 
-	if ( OpacityProp.IsSet() )
+	if ( OpacityProp.IsSet() && OpacityProp.Update( EasedAlpha ) )
 	{
-		OpacityProp.Update( EasedAlpha );
-		Target->SetRenderOpacity( OpacityProp.CurrentValue );
+		Target->SetRenderOpacity( OpacityProp.GetCurrentValue() );
 	}
 
 	// Only apply visibility changes at 0 or 1
@@ -176,23 +175,21 @@ void FBUITweenInstance::Apply( float EasedAlpha )
 	bool bChangedRenderTransform = false;
 	FWidgetTransform CurrentTransform = Target->GetRenderTransform();
 
-	if ( TranslationProp.IsSet() )
+	if ( TranslationProp.IsSet() && TranslationProp.Update( EasedAlpha ) )
 	{
-		TranslationProp.Update( EasedAlpha );
-		CurrentTransform.Translation = TranslationProp.CurrentValue;
+		CurrentTransform.Translation = TranslationProp.GetCurrentValue();
 		bChangedRenderTransform = true;
 	}
-	if ( ScaleProp.IsSet() )
+	if ( ScaleProp.IsSet() && ScaleProp.Update( EasedAlpha ))
 	{
-		ScaleProp.Update( EasedAlpha );
-		CurrentTransform.Scale = ScaleProp.CurrentValue;
+		CurrentTransform.Scale = ScaleProp.GetCurrentValue();
 		bChangedRenderTransform = true;
 	}
 	if ( RotationProp.IsSet() )
 	{
 		if ( RotationProp.Update( EasedAlpha ) )
 		{
-			CurrentTransform.Angle = RotationProp.CurrentValue;
+			CurrentTransform.Angle = RotationProp.GetCurrentValue();
 			bChangedRenderTransform = true;
 		}
 	}
@@ -202,7 +199,7 @@ void FBUITweenInstance::Apply( float EasedAlpha )
 		{
 			UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>( pWidget->Slot );
 			if ( CanvasSlot )
-				CanvasSlot->SetPosition( CanvasPositionProp.CurrentValue );
+				CanvasSlot->SetPosition( CanvasPositionProp.GetCurrentValue() );
 		}
 	}
 	if ( PaddingProp.IsSet() )
@@ -213,11 +210,11 @@ void FBUITweenInstance::Apply( float EasedAlpha )
 			UHorizontalBoxSlot* HorizontalBoxSlot = Cast<UHorizontalBoxSlot>( pWidget->Slot );
 			UVerticalBoxSlot* VerticalBoxSlot = Cast<UVerticalBoxSlot>( pWidget->Slot );
 			if ( OverlaySlot )
-				OverlaySlot->SetPadding( PaddingProp.CurrentValue );
+				OverlaySlot->SetPadding( PaddingProp.GetCurrentValue() );
 			else if ( HorizontalBoxSlot )
-				HorizontalBoxSlot->SetPadding( PaddingProp.CurrentValue );
+				HorizontalBoxSlot->SetPadding( PaddingProp.GetCurrentValue() );
 			else if ( VerticalBoxSlot )
-				VerticalBoxSlot->SetPadding( PaddingProp.CurrentValue );
+				VerticalBoxSlot->SetPadding( PaddingProp.GetCurrentValue() );
 		}
 	}
 	if ( MaxDesiredHeightProp.IsSet() )
@@ -227,7 +224,7 @@ void FBUITweenInstance::Apply( float EasedAlpha )
 			USizeBox* SizeBox = Cast<USizeBox>( pWidget );
 			if ( SizeBox )
 			{
-				SizeBox->SetMaxDesiredHeight( MaxDesiredHeightProp.CurrentValue );
+				SizeBox->SetMaxDesiredHeight( MaxDesiredHeightProp.GetCurrentValue() );
 			}
 		}
 	}

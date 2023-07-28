@@ -13,53 +13,96 @@ template<typename T>
 class TBUITweenProp
 {
 public:
-	bool bHasStart = false;
-	bool bHasTarget = false;
-	inline bool IsSet() const { return bHasStart || bHasTarget; }
-	T StartValue;
-	T TargetValue;
-	T CurrentValue;
-	bool bIsFirstTime = true;
+
+	inline bool IsSet() const
+	{
+		return bHasStart || bHasTarget;
+	}
+
 	void SetStart( T InStart )
 	{
 		bHasStart = true;
 		StartValue = InStart;
-		CurrentValue = StartValue;
 	}
 	void SetTarget( T InTarget )
 	{
 		bHasTarget = true;
 		TargetValue = InTarget;
 	}
+
+	bool IsNeedToApply()
+	{
+		return bNeedApply;
+	}
+
+	void SetNeedApply(const bool Value)
+	{
+		bNeedApply = Value;
+	}
+
 	void OnBegin( T InCurrentValue )
 	{
 		if ( !bHasStart )
 		{
 			StartValue = InCurrentValue;
-			CurrentValue = InCurrentValue;
 		}
 	}
+
+	bool IsFirstTime() const
+	{
+		return CurrentAlpha == 0.f;
+	}
+
+	T GetCurrentValue() const
+	{
+		return FMath::Lerp<T>( StartValue, TargetValue, CurrentAlpha );
+	}
+
+	[[nodiscard]]
 	bool Update( float Alpha )
 	{
+		const bool bShouldUpdateWidget = IsFirstTime() || !FMath::IsNearlyEqual(Alpha, CurrentAlpha, KINDA_SMALL_NUMBER);
+
+		UE_LOG(LogBUITween, Warning, TEXT("Alpha: %f"), Alpha);
+		if (bShouldUpdateWidget)
+		{
+			CurrentAlpha = Alpha;
+		}
+
+		return bShouldUpdateWidget;
+#if 0
 		const T OldValue = CurrentValue;
 		CurrentValue = FMath::Lerp<T>( StartValue, TargetValue, Alpha );
 		const bool bShouldUpdate = bIsFirstTime || CurrentValue != OldValue;
 		bIsFirstTime = false;
 		return bShouldUpdate;
+#endif
 	}
+
+private:
+	
+	T StartValue;
+	T TargetValue;
+
+	float CurrentAlpha = 0.f;
+
+	bool bNeedApply = false; // Used in Tween component
+	bool bHasStart = false;
+	bool bHasTarget = false;
 };
 
 template<typename T>
 class TBUITweenInstantProp
 {
 public:
+	bool bNeedUpdate = false; // Todo: this was added, but not implemented
 	bool bHasStart = false;
 	bool bHasTarget = false;
+	bool bIsFirstTime = true;
 	inline bool IsSet() const { return bHasStart || bHasTarget; }
 	T StartValue;
 	T TargetValue;
 	T CurrentValue;
-	bool bIsFirstTime = true;
 	void SetStart( T InStart )
 	{
 		bHasStart = true;
@@ -103,7 +146,7 @@ struct BUITWEEN_API FBUITweenInstance
 	GENERATED_BODY()
 
 public:
-	FBUITweenInstance() { }
+	FBUITweenInstance() = default;
 	FBUITweenInstance( UWidget* pInWidget, float InDuration, float InDelay = 0 )
 		: pWidget( pInWidget )
 		, Duration( InDuration )
@@ -315,3 +358,6 @@ protected:
 	bool bHasPlayedStartEvent = false;
 	bool bHasPlayedCompleteEvent = false;
 };
+
+
+

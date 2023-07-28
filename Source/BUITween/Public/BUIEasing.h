@@ -4,7 +4,7 @@
 #include "CoreUObject.h"
 
 UENUM()
-enum class EBUIEasingType
+enum class EBUIEasingType : uint8
 {
 	Linear,
 	Smoothstep,

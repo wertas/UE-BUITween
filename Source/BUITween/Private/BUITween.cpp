@@ -1,26 +1,59 @@
 #include "BUITween.h"
 
-TArray< FBUITweenInstance > UBUITween::ActiveInstances = TArray< FBUITweenInstance >();
-TArray< FBUITweenInstance > UBUITween::InstancesToAdd = TArray< FBUITweenInstance >();
+#include "BUITweenInstanceNew.h"
+
+#if 1
+TArray< FBUITweenInstance2 > UBUITween::ActiveInstances = TArray< FBUITweenInstance2 >();
+TArray< FBUITweenInstance2 > UBUITween::InstancesToAdd = TArray< FBUITweenInstance2 >();
+#endif
+
+FBUIPoolManager UBUITween::PoolManager{};
+
 bool UBUITween::bIsInitialized = false;
 
 void UBUITween::Startup()
 {
-	bIsInitialized = true;
+	PoolManager.RemoveAll();
 	ActiveInstances.Empty();
 	InstancesToAdd.Empty();
+
+	bIsInitialized = true;
+
+	check([]()
+	{
+		FBUIPoolManager::EntityHandle Handle = PoolManager.GetEntityHandle();
+
+		struct Bla
+		{
+			void Apply() {}
+			void Begin() {}
+			void SetActive(const bool) {}
+			void SetData(void*) {}
+		};
+		PoolManager.Add(Handle, Bla{});
+		PoolManager.Add(Handle, BUITweenComponents::BUITranslationTween()
+			.From(FVector2D(5, 5))
+			.To(FVector2D(10, 10)));
+		PoolManager.RemoveEntity(Handle);
+
+		return true;
+	}
+	());
 }
 
 
 void UBUITween::Shutdown()
 {
+	PoolManager.RemoveAll();
 	ActiveInstances.Empty();
 	InstancesToAdd.Empty();
+
 	bIsInitialized = false;
 }
 
 
-FBUITweenInstance& UBUITween::Create( UWidget* pInWidget, float InDuration, float InDelay, bool bIsAdditive )
+
+FBUITweenInstance2& UBUITween::Create( UWidget* pInWidget, float InDuration, float InDelay, bool bIsAdditive )
 {
 	// By default let's kill any existing tweens
 	if ( !bIsAdditive )
@@ -28,9 +61,7 @@ FBUITweenInstance& UBUITween::Create( UWidget* pInWidget, float InDuration, floa
 		Clear( pInWidget );
 	}
 
-	FBUITweenInstance Instance( pInWidget, InDuration, InDelay );
-
-	InstancesToAdd.Add( Instance );
+	InstancesToAdd.Emplace( pInWidget, InDuration, InDelay );
 
 	return InstancesToAdd.Last();
 }
@@ -40,8 +71,9 @@ int32 UBUITween::Clear( UWidget* pInWidget )
 {
 	int32 NumRemoved = 0;
 
-	auto DoesTweenMatchWidgetFn = [pInWidget](const FBUITweenInstance& CurTweenInstance) -> bool {
-		return ( CurTweenInstance.GetWidget().IsValid() && CurTweenInstance.GetWidget() == pInWidget );
+	const auto DoesTweenMatchWidgetFn = [pInWidget](const FBUITweenInstance2& CurTweenInstance) -> bool
+	{
+		return CurTweenInstance.GetWidget().IsValid() && CurTweenInstance.GetWidget() == pInWidget;
 	};
 
 	NumRemoved += ActiveInstances.RemoveAll(DoesTweenMatchWidgetFn);
@@ -54,14 +86,26 @@ int32 UBUITween::Clear( UWidget* pInWidget )
 void UBUITween::Update( float DeltaTime )
 {
 	// Reverse it so we can remove
+	//for ( int32 i = ActiveInstances.Num()-1; i >= 0; --i )
+
+
+	for (auto& ActiveInst: ActiveInstances)
+	{
+		ActiveInst.PreComponentsUpdate(DeltaTime);
+	}
+
+	PoolManager.ApplyAll();
+
+	// Reverse it so we can remove
 	for ( int32 i = ActiveInstances.Num()-1; i >= 0; --i )
 	{
-		FBUITweenInstance& Inst = ActiveInstances[ i ];
-		Inst.Update( DeltaTime );
-		if ( Inst.IsComplete() )
+		FBUITweenInstance2& ActiveInst = ActiveInstances[ i ];
+		ActiveInst.PostComponentsUpdate();
+
+		if ( ActiveInst.IsComplete() )
 		{
-			FBUITweenInstance CompleteInst = Inst;
-			ActiveInstances.RemoveAtSwap( i );
+			FBUITweenInstance2 CompleteInst = MoveTemp(ActiveInst);
+			ActiveInstances.RemoveAtSwap( i, 1, false );
 
 			// We do this here outside of the instance update and after removing from active instances because we
 			// don't know if the callback in the cleanup is going to trigger adding more events
@@ -69,7 +113,10 @@ void UBUITween::Update( float DeltaTime )
 		}
 	}
 
-	ActiveInstances.Append(MoveTemp(InstancesToAdd));
+	for (int32 i = 0; i < InstancesToAdd.Num(); ++i)
+	{
+		ActiveInstances.Add(MoveTemp(InstancesToAdd[i]));
+	}
 	InstancesToAdd.Empty();
 }
 

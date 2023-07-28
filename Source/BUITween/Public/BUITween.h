@@ -2,8 +2,11 @@
 
 #include "BUIEasing.h"
 #include "Components/Widget.h"
-#include "BUITweenInstance.h"
+//#include "BUITweenInstance.h"
+#include "BUIPoolManager.h"
 #include "BUITween.generated.h"
+
+struct FBUITweenInstance2;
 
 UCLASS()
 class BUITWEEN_API UBUITween : public UObject
@@ -15,7 +18,7 @@ public:
 	static void Shutdown();
 
 	// Create a new tween on the target widget, does not start automatically
-	static FBUITweenInstance& Create( UWidget* pInWidget, float InDuration = 1.0f, float InDelay = 0.0f, bool bIsAdditive = false );
+	static FBUITweenInstance2& Create( UWidget* pInWidget, float InDuration = 1.0f, float InDelay = 0.0f, bool bIsAdditive = false );
 
 	// Cancel all tweens on the target widget, returns the number of tween instances removed
 	static int32 Clear( UWidget* pInWidget );
@@ -26,16 +29,26 @@ public:
 
 	static void CompleteAll();
 
-protected:
+	static FBUIPoolManager& GetPoolManager() { return PoolManager; }
+
+private:
 	static bool bIsInitialized;
 
-	static TArray< FBUITweenInstance > ActiveInstances;
+	static FBUIPoolManager PoolManager;
+
+#if 1
+	static TArray< FBUITweenInstance2 > ActiveInstances;
 
 	// We delay adding until the end of an update so we don't add to ActiveInstances within our update loop
-	static TArray< FBUITweenInstance > InstancesToAdd;
+	static TArray< FBUITweenInstance2 > InstancesToAdd;
+#endif
 };
 
 
+
+
+
+#if 0
 
 UCLASS(BlueprintType)
 class BUITWEEN_API UBUIParamChain : public UObject
@@ -65,7 +78,7 @@ public:
 	static UBUIParamChain* CreateAnimationParams(UWidget* InWidget, const float InDuration = 1.0f, const float InDelay = 0.0f, const bool bIsAdditive = false)
 	{
 		FBUITweenInstance& Tween = UBUITween::Create(InWidget, InDuration, InDelay, bIsAdditive);
-		UBUIParamChain* Params = NewObject<UBUIParamChain>(GetTransientPackage(), TEXT(""), RF_MarkAsRootSet);
+		UBUIParamChain* Params = NewObject<UBUIParamChain>(GetTransientPackage(), NAME_None, RF_MarkAsRootSet);
 		Params->TweenInstance = &Tween;
 		return Params;
 	}
@@ -221,3 +234,5 @@ public:
 private:
 
 };
+
+#endif

@@ -5,7 +5,7 @@
 #include "BUIPoolManager.h"
 #include "BUITween.generated.h"
 
-struct FBUITweenInstance;
+class FBUITweenInstance;
 
 
 UCLASS()
@@ -29,9 +29,23 @@ public:
 
 	static void CompleteAll();
 
+
+
+public:
+
+	class FBUITweenInstanceAttorney
+	{
+		friend class FBUITweenInstance;
+		static FBUIPoolManager& GetPoolManager() { return UBUITween::PoolManager; }
+	};
+
+private:
+
+	friend class Attorney;
 	static FBUIPoolManager& GetPoolManager() { return PoolManager; }
 
 private:
+
 	static bool bIsInitialized;
 
 	static FBUIPoolManager PoolManager;

@@ -115,6 +115,7 @@ void UBUITween::Update( float DeltaTime )
 		if ( ActiveInst.IsComplete() )
 		{
 			TRACE_CPUPROFILER_EVENT_SCOPE_STR("RemoveAtSwap, DoCompleteCleanup");
+
 			FBUITweenInstance CompleteInst = MoveTemp(ActiveInst);
 			ActiveInstances.RemoveAtSwap( i, 1, false );
 

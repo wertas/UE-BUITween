@@ -106,7 +106,7 @@ template<typename T>
 class TBUITweenInstantProp
 {
 public:
-	bool bNeedUpdate = false; // Todo: this was added, but not implemented
+	bool bNeedUpdate = false;
 	bool bHasStart = false;
 	bool bHasTarget = false;
 	bool bIsFirstTime = true;
@@ -197,56 +197,48 @@ private:
 
 
 
-struct BUITWEEN_API FBUITweenInstance
+class BUITWEEN_API FBUITweenInstance
 {
-
+	using PoolManagerAttorney = UBUITween::FBUITweenInstanceAttorney;
 public:
 	FBUITweenInstance() = delete;
-	~FBUITweenInstance()
-	{
-		if (Entity != FBUIPoolManager::INVALID_ENTITY)
-		{
-			UBUITween::GetPoolManager().RemoveEntity(Entity);
-		}
-	}
-
-
-	FBUITweenInstance(const FBUITweenInstance&) = delete;
-	FBUITweenInstance& operator=(const FBUITweenInstance&) = delete;
-
-	FBUITweenInstance(FBUITweenInstance&& Other)
-		: PostActionsMap(MoveTemp(Other.PostActionsMap)),
-		bShouldUpdateInstance(Other.bShouldUpdateInstance),
-		bShouldUpdateComponents(Other.bShouldUpdateComponents),
-		bIsComplete(Other.bIsComplete),
-		bHasPlayedStartEvent(Other.bHasPlayedStartEvent),
-		bHasPlayedCompleteEvent(Other.bHasPlayedCompleteEvent),
-		EasingType(Other.EasingType),
-		WidgetPtr(Other.WidgetPtr),
-		Delay(Other.Delay),
-		EasedAlpha(Other.EasedAlpha),
-		Alpha(Other.Alpha),
-		Duration(Other.Duration),
-		Entity(Other.Entity),
-		EasingParam(Other.EasingParam),
-		OnStartedDelegate(Other.OnStartedDelegate),
-		OnCompleteDelegate(Other.OnCompleteDelegate),
-		OnStartedBPDelegate(Other.OnStartedBPDelegate),
-		OnCompleteBPDelegate(Other.OnCompleteBPDelegate)
-	{
-		UBUITween::GetPoolManager().SetEntityData(Entity, this);
-		Other.Entity = FBUIPoolManager::INVALID_ENTITY;
-	}
-
-	FBUITweenInstance& operator=(FBUITweenInstance&&) = default;
 
 	FBUITweenInstance(UWidget* Widget, float InDuration, float InDelay = 0.f)
 		: WidgetPtr(Widget),
 		Delay(InDelay),
 		Duration(InDuration),
-		Entity(UBUITween::GetPoolManager().GetEntityHandle())
+		Entity(PoolManagerAttorney::GetPoolManager().GetEntityHandle())
 	{
 		ensure(Widget != nullptr);
+	}
+
+	~FBUITweenInstance()
+	{
+		if (Entity != FBUIPoolManager::INVALID_ENTITY)
+		{
+			PoolManagerAttorney::GetPoolManager().RemoveEntity(Entity);
+		}
+	}
+
+	FBUITweenInstance(const FBUITweenInstance&) = delete;
+	FBUITweenInstance& operator=(const FBUITweenInstance&) = delete;
+
+	FBUITweenInstance(FBUITweenInstance&& Other)
+	{
+		swap(*this, Other);
+		ensure(Other.Entity == FBUIPoolManager::INVALID_ENTITY);
+
+		if (Entity != FBUIPoolManager::INVALID_ENTITY)
+		{
+			PoolManagerAttorney::GetPoolManager().SetEntityData(Entity, this);
+		}
+	}
+
+	FBUITweenInstance& operator=(FBUITweenInstance&& Other)
+	{
+		FBUITweenInstance Temp = std::move(*this);
+		swap(*this, Other);
+		return *this;
 	}
 
 	void Begin()
@@ -254,8 +246,8 @@ public:
 		bShouldUpdateInstance = true;
 		SetShouldUpdateComponents(true);
 
-		UBUITween::GetPoolManager().EntityBegin(Entity);
-		UBUITween::GetPoolManager().Apply(Entity);
+		PoolManagerAttorney::GetPoolManager().EntityBegin(Entity);
+		PoolManagerAttorney::GetPoolManager().Apply(Entity);
 	}
 
 	void SetShouldUpdateComponents(const bool NewValue)
@@ -263,7 +255,7 @@ public:
 		if (bShouldUpdateComponents != NewValue)
 		{
 			bShouldUpdateComponents = NewValue;
-			UBUITween::GetPoolManager().SetEntityActive(Entity, NewValue);
+			PoolManagerAttorney::GetPoolManager().SetEntityActive(Entity, NewValue);
 		}
 	}
 
@@ -355,7 +347,7 @@ public:
 	FBUITweenInstance& SetTween(TweenComponent&& Component)
 	{
 		Component.Instance = this;
-		UBUITween::GetPoolManager().Add(Entity, std::forward<TweenComponent>(Component));
+		PoolManagerAttorney::GetPoolManager().Add(Entity, std::forward<TweenComponent>(Component));
 		return *this;
 	}
 
@@ -392,8 +384,32 @@ public:
 			OnCompleteBPDelegate.ExecuteIfBound( WidgetPtr.Get() );
 			bHasPlayedCompleteEvent = true;
 		}
-		UBUITween::GetPoolManager().RemoveEntity(Entity);
+		PoolManagerAttorney::GetPoolManager().RemoveEntity(Entity);
 		Entity = FBUIPoolManager::INVALID_ENTITY;
+	}
+
+	friend void swap(FBUITweenInstance& First, FBUITweenInstance& Second)
+	{
+		using std::swap;
+
+		swap(First.PostActionsMap, Second.PostActionsMap);
+		swap(First.bShouldUpdateInstance, Second.bShouldUpdateInstance);
+		swap(First.bShouldUpdateComponents, Second.bShouldUpdateComponents);
+		swap(First.bIsComplete, Second.bIsComplete);
+		swap(First.bHasPlayedStartEvent, Second.bHasPlayedStartEvent);
+		swap(First.bHasPlayedCompleteEvent, Second.bHasPlayedCompleteEvent);
+		swap(First.EasingType, Second.EasingType);
+		swap(First.WidgetPtr, Second.WidgetPtr);
+		swap(First.Delay, Second.Delay);
+		swap(First.EasedAlpha, Second.EasedAlpha);
+		swap(First.Alpha, Second.Alpha);
+		swap(First.Duration, Second.Duration);
+		swap(First.Entity, Second.Entity);
+		swap(First.EasingParam, Second.EasingParam);
+		swap(First.OnStartedDelegate, Second.OnStartedDelegate);
+		swap(First.OnCompleteDelegate, Second.OnCompleteDelegate);
+		swap(First.OnStartedBPDelegate, Second.OnStartedBPDelegate);
+		swap(First.OnCompleteBPDelegate, Second.OnCompleteBPDelegate);
 	}
 
 public:
@@ -416,7 +432,7 @@ public:
 	float EasedAlpha = 0.f;
 	float Alpha = 0.f;
 	float Duration = 1.f;
-	FBUIPoolManager::EntityHandle Entity;
+	FBUIPoolManager::EntityHandle Entity = FBUIPoolManager::INVALID_ENTITY;
 	TOptional<float> EasingParam;
 
 

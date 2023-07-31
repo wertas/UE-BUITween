@@ -5,7 +5,7 @@
 #include <type_traits>
 
 
-namespace Details
+namespace BUIDetails
 {
 
 // local_storage copied from https://github.com/boost-ext/te (at commit 27465847fe489d33a91014488284210f183cb502)
@@ -142,7 +142,28 @@ void SwapAndPop(TArray<T>& Vec, typename TArray<T>::SizeType Index)
     Vec.RemoveAtSwap(Index, 1, false);
 }
 
-}
+class TypeIndexer
+{
+public:
+    using TypeIndex = uint32;
+
+    template<typename T>
+    static TypeIndex GetTypeIndex()
+    {
+        static TypeIndex Value = GetNextNumber();
+        return Value;
+    }
+
+private:
+
+    static TypeIndex GetNextNumber()
+    {
+        static TypeIndex Number = -1;
+        return ++Number;
+    }
+};
+
+} // namespace BUIDetails
 
 /*
 * TODO: Repair docstring
@@ -187,6 +208,7 @@ public:
 
     using EntityHandle = uint32;
     static const EntityHandle ALL_ENTITIES = 0;
+    static const EntityHandle INVALID_ENTITY = 1; // Must be the last used reserved number
 
     // All objects that are going to be added to the manager must have this functions implemented
     struct ExampleObject
@@ -203,7 +225,7 @@ public:
     {
         for (auto& Pool: Pools)
         {
-            Pool.ApplyEntity_OrEntities(Handle);
+            Pool.ApplyEntity_OrAll(Handle);
         }
     }
 
@@ -216,7 +238,7 @@ public:
     {
         for (auto& Pool: Pools)
         {
-            Pool.EntityBegin_OrEntities(Handle);
+            Pool.EntityBegin_OrAll(Handle);
         }
     }
 
@@ -224,7 +246,7 @@ public:
     {
         for (auto& Pool: Pools)
         {
-            Pool.RemoveEntity_OrEntities(Handle);
+            Pool.RemoveEntity_OrAll(Handle);
         }
     }
 
@@ -241,7 +263,7 @@ public:
     {
         for (auto& Pool: Pools)
         {
-            Pool.SetEntityActive_OrEntities(Handle, bValue);
+            Pool.SetEntityActive_OrAll(Handle, bValue);
         }
     }
 
@@ -262,7 +284,12 @@ public:
 
     EntityHandle GetEntityHandle()
     {
-        return ++LastEntity;
+        ++LastEntity;
+        if (LastEntity == 0)
+        {
+            LastEntity = INVALID_ENTITY + 1;
+        }
+        return LastEntity;
     }
 
     template<typename T>
@@ -287,10 +314,10 @@ private:
     {
         virtual ~VirtualTable() noexcept = default;
 
-        virtual void ApplyEntity_OrEntities(const EntityHandle Handle) noexcept = 0;
-        virtual void EntityBegin_OrEntities(const EntityHandle Handle) noexcept = 0;
-        virtual void RemoveEntity_OrEntities(const EntityHandle Handle) noexcept = 0;
-        virtual void SetEntityActive_OrEntities(const EntityHandle Handle, const bool bValue) noexcept = 0;
+        virtual void ApplyEntity_OrAll(const EntityHandle Handle) noexcept = 0;
+        virtual void EntityBegin_OrAll(const EntityHandle Handle) noexcept = 0;
+        virtual void RemoveEntity_OrAll(const EntityHandle Handle) noexcept = 0;
+        virtual void SetEntityActive_OrAll(const EntityHandle Handle, const bool bValue) noexcept = 0;
         virtual void SetEntityData(const EntityHandle Handle, void* Data) noexcept = 0;
     };
 
@@ -299,14 +326,14 @@ private:
     {
     public:
 
-        static_assert(Details::CheckFunctionsSame<decltype(&std::remove_reference_t<T>::Apply), decltype(&ExampleObject::Apply)>(), "Object must have void Apply() function");
-        static_assert(Details::CheckFunctionsSame<decltype(&std::remove_reference_t<T>::Begin), decltype(&ExampleObject::Begin)>(), "Object must have void Begin() function");
-        static_assert(Details::CheckFunctionsSame<decltype(&std::remove_reference_t<T>::SetActive), decltype(&ExampleObject::SetActive)>(), "Object must have void SetActive(const bool) function");
-        static_assert(Details::CheckFunctionsSame<decltype(&std::remove_reference_t<T>::SetData), decltype(&ExampleObject::SetData)>(), "Object must have void SetData(void*) function");
+        static_assert(BUIDetails::CheckFunctionsSame<decltype(&std::remove_reference_t<T>::Apply), decltype(&ExampleObject::Apply)>(), "Object must have void Apply() function");
+        static_assert(BUIDetails::CheckFunctionsSame<decltype(&std::remove_reference_t<T>::Begin), decltype(&ExampleObject::Begin)>(), "Object must have void Begin() function");
+        static_assert(BUIDetails::CheckFunctionsSame<decltype(&std::remove_reference_t<T>::SetActive), decltype(&ExampleObject::SetActive)>(), "Object must have void SetActive(const bool) function");
+        static_assert(BUIDetails::CheckFunctionsSame<decltype(&std::remove_reference_t<T>::SetData), decltype(&ExampleObject::SetData)>(), "Object must have void SetData(void*) function");
 
         // ********** Internal interface implementation BEGIN **********
 
-        virtual void ApplyEntity_OrEntities(const EntityHandle Handle) noexcept override
+        virtual void ApplyEntity_OrAll(const EntityHandle Handle) noexcept override
         {
             if (Handle == ALL_ENTITIES)
             {
@@ -323,7 +350,7 @@ private:
             }
         }
 
-        virtual void EntityBegin_OrEntities(const EntityHandle Handle) noexcept override
+        virtual void EntityBegin_OrAll(const EntityHandle Handle) noexcept override
         {
             if (Handle == ALL_ENTITIES)
             {
@@ -340,7 +367,7 @@ private:
             }
         }
 
-        virtual void RemoveEntity_OrEntities(const EntityHandle Handle) noexcept override
+        virtual void RemoveEntity_OrAll(const EntityHandle Handle) noexcept override
         {
             if (Handle == ALL_ENTITIES)
             {
@@ -370,8 +397,8 @@ private:
 
                 const bool bNeedToFixLastEntityInMap = Objects.Num() - 1 != Index; // Last element was already removed, so no need to fix if false
 
-                Details::SwapAndPop(Objects, Index);
-                Details::SwapAndPop(Handles, Index);
+                BUIDetails::SwapAndPop(Objects, Index);
+                BUIDetails::SwapAndPop(Handles, Index);
 
                 if (bNeedToFixLastEntityInMap)
                 {
@@ -384,7 +411,7 @@ private:
             }
         }
 
-        virtual void SetEntityActive_OrEntities(const EntityHandle Handle, const bool bValue) noexcept override
+        virtual void SetEntityActive_OrAll(const EntityHandle Handle, const bool bValue) noexcept override
         {
             if (Handle == ALL_ENTITIES)
             {
@@ -447,7 +474,7 @@ private:
     class PoolInterface
     {
     public:
-        using FStorage = Details::local_storage<sizeof(PoolImpl<ExampleObject>)>;
+        using FStorage = BUIDetails::local_storage<sizeof(PoolImpl<ExampleObject>)>;
 
         PoolInterface(PoolInterface&& Other) = default;
         PoolInterface& operator=(PoolInterface&& Other) = default;
@@ -460,24 +487,24 @@ private:
 
         // ********** Internal interface BEGIN **********
 
-        void ApplyEntity_OrEntities(const EntityHandle Handle) noexcept
+        void ApplyEntity_OrAll(const EntityHandle Handle) noexcept
         {
-            GetTable()->ApplyEntity_OrEntities(Handle);
+            GetTable()->ApplyEntity_OrAll(Handle);
         }
 
-        void EntityBegin_OrEntities(const EntityHandle Handle) noexcept
+        void EntityBegin_OrAll(const EntityHandle Handle) noexcept
         {
-            GetTable()->EntityBegin_OrEntities(Handle);
+            GetTable()->EntityBegin_OrAll(Handle);
         }
 
-        void RemoveEntity_OrEntities(const EntityHandle Handle) noexcept
+        void RemoveEntity_OrAll(const EntityHandle Handle) noexcept
         {
-            GetTable()->RemoveEntity_OrEntities(Handle);
+            GetTable()->RemoveEntity_OrAll(Handle);
         }
 
-        void SetEntityActive_OrEntities(const EntityHandle Handle, const bool bValue)
+        void SetEntityActive_OrAll(const EntityHandle Handle, const bool bValue)
         {
-            GetTable()->SetEntityActive_OrEntities(Handle, bValue);
+            GetTable()->SetEntityActive_OrAll(Handle, bValue);
         }
 
         void SetEntityData(const EntityHandle Handle, void* Data)
@@ -520,25 +547,12 @@ private:
     };
 
     using PoolsArray = TArray<PoolInterface>;
-    using TypeIndex = uint32;
-
-    static TypeIndex GetNextNumber()
-    {
-        static TypeIndex Number = -1;
-        return ++Number;
-    }
-
-    template<typename T>
-    static TypeIndex GetTypeIndex()
-    {
-        static TypeIndex Value = GetNextNumber();
-        return Value;
-    }
+    using TypeIndex = BUIDetails::TypeIndexer::TypeIndex;
 
     template<typename T>
     PoolsArray::SizeType GetPoolIndex()
     {
-        const TypeIndex TypeId = GetTypeIndex<T>();
+        const TypeIndex TypeId = BUIDetails::TypeIndexer::GetTypeIndex<T>();
         if (PoolsArray::SizeType* Idx = TypeToPoolIndexMap.Find(TypeId))
         {
             return *Idx;
@@ -555,7 +569,7 @@ private:
 
 private:
 
-    EntityHandle LastEntity = 0;
+    EntityHandle LastEntity = INVALID_ENTITY;
 
     TMap<TypeIndex, PoolsArray::SizeType> TypeToPoolIndexMap;
     TArray<PoolInterface> Pools;

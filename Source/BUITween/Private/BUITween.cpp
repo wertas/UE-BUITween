@@ -1,13 +1,12 @@
 #include "BUITween.h"
 
-#include "BUITweenInstanceNew.h"
+#include "BUITweenInstance.h"
 
-#if 1
-TArray< FBUITweenInstance2 > UBUITween::ActiveInstances = TArray< FBUITweenInstance2 >();
-TArray< FBUITweenInstance2 > UBUITween::InstancesToAdd = TArray< FBUITweenInstance2 >();
-#endif
+TArray<TUniquePtr<FBUITweenInstance>> UBUITween::ActiveInstances{};
+TArray<TUniquePtr<FBUITweenInstance>> UBUITween::InstancesToAdd{};
 
 FBUIPoolManager UBUITween::PoolManager{};
+
 
 bool UBUITween::bIsInitialized = false;
 
@@ -53,17 +52,18 @@ void UBUITween::Shutdown()
 
 
 
-FBUITweenInstance2& UBUITween::Create( UWidget* pInWidget, float InDuration, float InDelay, bool bIsAdditive )
+FBUITweenInstance& UBUITween::Create( UWidget* pInWidget, float InDuration, float InDelay, bool bIsAdditive )
 {
 	// By default let's kill any existing tweens
 	if ( !bIsAdditive )
 	{
 		Clear( pInWidget );
 	}
+	
+	//static_assert(false, "Reallocation breaks");
+	InstancesToAdd.Emplace(MakeUnique<FBUITweenInstance>(pInWidget, InDuration, InDelay));
 
-	InstancesToAdd.Emplace( pInWidget, InDuration, InDelay );
-
-	return InstancesToAdd.Last();
+	return *InstancesToAdd.Last();
 }
 
 
@@ -71,9 +71,9 @@ int32 UBUITween::Clear( UWidget* pInWidget )
 {
 	int32 NumRemoved = 0;
 
-	const auto DoesTweenMatchWidgetFn = [pInWidget](const FBUITweenInstance2& CurTweenInstance) -> bool
+	const auto DoesTweenMatchWidgetFn = [pInWidget](const TUniquePtr<FBUITweenInstance>& CurTweenInstance) -> bool
 	{
-		return CurTweenInstance.GetWidget().IsValid() && CurTweenInstance.GetWidget() == pInWidget;
+		return CurTweenInstance->GetWidget().IsValid() && CurTweenInstance->GetWidget() == pInWidget;
 	};
 
 	NumRemoved += ActiveInstances.RemoveAll(DoesTweenMatchWidgetFn);
@@ -88,23 +88,34 @@ void UBUITween::Update( float DeltaTime )
 	// Reverse it so we can remove
 	//for ( int32 i = ActiveInstances.Num()-1; i >= 0; --i )
 
+	TRACE_CPUPROFILER_EVENT_SCOPE_STR("UBUITween::Update");
 
-	for (auto& ActiveInst: ActiveInstances)
 	{
-		ActiveInst.PreComponentsUpdate(DeltaTime);
+		TRACE_CPUPROFILER_EVENT_SCOPE_STR("PreComponentsUpdate");
+		for (auto& ActiveInst : ActiveInstances)
+		{
+			ActiveInst->PreComponentsUpdate(DeltaTime);
+		}
 	}
 
-	PoolManager.ApplyAll();
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE_STR("PoolManager.ApplyAll");
+		PoolManager.ApplyAll();
+	}
 
 	// Reverse it so we can remove
 	for ( int32 i = ActiveInstances.Num()-1; i >= 0; --i )
 	{
-		FBUITweenInstance2& ActiveInst = ActiveInstances[ i ];
-		ActiveInst.PostComponentsUpdate();
-
+		FBUITweenInstance& ActiveInst = *ActiveInstances[i];
+		{
+			TRACE_CPUPROFILER_EVENT_SCOPE_STR("PostComponentsUpdate");
+			ActiveInst.PostComponentsUpdate();
+		}
+		
 		if ( ActiveInst.IsComplete() )
 		{
-			FBUITweenInstance2 CompleteInst = MoveTemp(ActiveInst);
+			TRACE_CPUPROFILER_EVENT_SCOPE_STR("RemoveAtSwap, DoCompleteCleanup");
+			FBUITweenInstance CompleteInst = MoveTemp(ActiveInst);
 			ActiveInstances.RemoveAtSwap( i, 1, false );
 
 			// We do this here outside of the instance update and after removing from active instances because we
@@ -113,6 +124,7 @@ void UBUITween::Update( float DeltaTime )
 		}
 	}
 
+	TRACE_CPUPROFILER_EVENT_SCOPE_STR("InstancesToAdd to ActiveInstances");
 	for (int32 i = 0; i < InstancesToAdd.Num(); ++i)
 	{
 		ActiveInstances.Add(MoveTemp(InstancesToAdd[i]));
@@ -125,7 +137,7 @@ bool UBUITween::GetIsTweening( UWidget* pInWidget )
 {
 	for ( int32 i = 0; i < ActiveInstances.Num(); ++i )
 	{
-		if ( ActiveInstances[ i ].GetWidget() == pInWidget )
+		if ( ActiveInstances[ i ]->GetWidget() == pInWidget )
 		{
 			return true;
 		}

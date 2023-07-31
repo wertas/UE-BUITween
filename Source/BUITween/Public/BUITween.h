@@ -2,11 +2,11 @@
 
 #include "BUIEasing.h"
 #include "Components/Widget.h"
-//#include "BUITweenInstance.h"
 #include "BUIPoolManager.h"
 #include "BUITween.generated.h"
 
-struct FBUITweenInstance2;
+struct FBUITweenInstance;
+
 
 UCLASS()
 class BUITWEEN_API UBUITween : public UObject
@@ -18,7 +18,7 @@ public:
 	static void Shutdown();
 
 	// Create a new tween on the target widget, does not start automatically
-	static FBUITweenInstance2& Create( UWidget* pInWidget, float InDuration = 1.0f, float InDelay = 0.0f, bool bIsAdditive = false );
+	static FBUITweenInstance& Create( UWidget* pInWidget, float InDuration = 1.0f, float InDelay = 0.0f, bool bIsAdditive = false );
 
 	// Cancel all tweens on the target widget, returns the number of tween instances removed
 	static int32 Clear( UWidget* pInWidget );
@@ -36,12 +36,10 @@ private:
 
 	static FBUIPoolManager PoolManager;
 
-#if 1
-	static TArray< FBUITweenInstance2 > ActiveInstances;
+	static TArray<TUniquePtr<FBUITweenInstance>> ActiveInstances;
 
 	// We delay adding until the end of an update so we don't add to ActiveInstances within our update loop
-	static TArray< FBUITweenInstance2 > InstancesToAdd;
-#endif
+	static TArray<TUniquePtr<FBUITweenInstance>> InstancesToAdd;
 };
 
 

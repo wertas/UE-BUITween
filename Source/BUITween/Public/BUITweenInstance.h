@@ -1,33 +1,45 @@
 #pragma once
 
+#include "Delegates/Delegate.h"
 #include "BUIEasing.h"
 #include "Components/Widget.h"
+
+#include "BUIPoolManager.h"
+#include "BUITween.h"
 #include "BUITweenInstance.generated.h"
 
-DECLARE_DELEGATE_OneParam( FBUITweenSignature, UWidget* /*Owner*/ );
-DECLARE_DYNAMIC_DELEGATE_OneParam( FBUITweenBPSignature, UWidget*, Owner );
 
 BUITWEEN_API DECLARE_LOG_CATEGORY_EXTERN(LogBUITween, Log, All);
+
+DECLARE_DELEGATE_OneParam(FBUITweenSignature, UWidget* /*Owner*/);
+UDELEGATE() DECLARE_DYNAMIC_DELEGATE_OneParam(FBUITweenBPSignature, UWidget*, Owner);
+
 
 template<typename T>
 class TBUITweenProp
 {
 public:
 
-	inline bool IsSet() const
+	inline bool IsSet() const 
 	{
+		ensure(false); // todo: add checks on this, or remove this
 		return bHasStart || bHasTarget;
 	}
 
-	void SetStart( T InStart )
+	template<typename CallerT>
+	void SetStart( CallerT&& InStart )
 	{
+		static_assert(std::is_same_v<std::decay_t<CallerT>, T>);
 		bHasStart = true;
-		StartValue = InStart;
+		StartValue = std::forward<CallerT>(InStart);
 	}
-	void SetTarget( T InTarget )
+
+	template<typename CallerT>
+	void SetTarget( CallerT&& InTarget )
 	{
+		static_assert(std::is_same_v<std::decay_t<CallerT>, T>);
 		bHasTarget = true;
-		TargetValue = InTarget;
+		TargetValue = std::forward<CallerT>(InTarget);
 	}
 
 	bool IsNeedToApply()
@@ -61,26 +73,25 @@ public:
 	[[nodiscard]]
 	bool Update( float Alpha )
 	{
+		//TRACE_CPUPROFILER_EVENT_SCOPE_STR("TBUITweenProp::Update");
+
+		if (!IsSet() || !bNeedApply)
+		{
+			return false;
+		}
+
 		const bool bShouldUpdateWidget = IsFirstTime() || !FMath::IsNearlyEqual(Alpha, CurrentAlpha, KINDA_SMALL_NUMBER);
 
-		UE_LOG(LogBUITween, Warning, TEXT("Alpha: %f"), Alpha);
+		//UE_LOG(LogBUITween, Warning, TEXT("Alpha: %f"), Alpha);
 		if (bShouldUpdateWidget)
 		{
 			CurrentAlpha = Alpha;
 		}
-
 		return bShouldUpdateWidget;
-#if 0
-		const T OldValue = CurrentValue;
-		CurrentValue = FMath::Lerp<T>( StartValue, TargetValue, Alpha );
-		const bool bShouldUpdate = bIsFirstTime || CurrentValue != OldValue;
-		bIsFirstTime = false;
-		return bShouldUpdate;
-#endif
 	}
 
 private:
-	
+
 	T StartValue;
 	T TargetValue;
 
@@ -124,6 +135,7 @@ public:
 	}
 	bool Update( float Alpha )
 	{
+		check(false); // todo: rewrite TBUITweenInstantProp
 		const T OldValue = CurrentValue;
 		if ( Alpha >= 1 && bHasTarget )
 		{
@@ -139,29 +151,195 @@ public:
 	}
 };
 
+class BUIPostActionsBase
+{
+public:
 
-USTRUCT()
+	BUIPostActionsBase()
+		: WidgetPtr(nullptr),
+		  bIsValid(false)
+	{}
+
+	BUIPostActionsBase(TWeakObjectPtr<UWidget> InWidget)
+		: WidgetPtr(InWidget),
+		  bIsValid(WidgetPtr.IsValid())
+	{}
+
+	virtual ~BUIPostActionsBase() = default;
+
+	virtual void ApplyAction() noexcept = 0;
+
+
+	void SetWidget(TWeakObjectPtr<UWidget> InWidget)
+	{
+		WidgetPtr = InWidget;
+		bIsValid = InWidget.IsValid();
+	}
+
+	// Rely on this with caution
+	bool IsSet() const
+	{
+		return bIsValid;
+	}
+
+	void Reset()
+	{
+		WidgetPtr.Reset();
+		bIsValid = false;
+	}
+protected:
+	TWeakObjectPtr<UWidget> WidgetPtr;
+
+private:
+	bool bIsValid;
+};
+
+
+
+
 struct BUITWEEN_API FBUITweenInstance
 {
-	GENERATED_BODY()
 
 public:
-	FBUITweenInstance() = default;
-	FBUITweenInstance( UWidget* pInWidget, float InDuration, float InDelay = 0 )
-		: pWidget( pInWidget )
-		, Duration( InDuration )
-		, Delay( InDelay )
+	FBUITweenInstance() = delete;
+	~FBUITweenInstance()
 	{
-		ensure( pInWidget != nullptr );
-
+		if (Entity != FBUIPoolManager::INVALID_ENTITY)
+		{
+			UBUITween::GetPoolManager().RemoveEntity(Entity);
+		}
 	}
-	void Begin();
-	void Update( float InDeltaTime );
-	void Apply( float EasedAlpha );
+
+
+	FBUITweenInstance(const FBUITweenInstance&) = delete;
+	FBUITweenInstance& operator=(const FBUITweenInstance&) = delete;
+
+	FBUITweenInstance(FBUITweenInstance&& Other)
+		: PostActionsMap(MoveTemp(Other.PostActionsMap)),
+		bShouldUpdateInstance(Other.bShouldUpdateInstance),
+		bShouldUpdateComponents(Other.bShouldUpdateComponents),
+		bIsComplete(Other.bIsComplete),
+		bHasPlayedStartEvent(Other.bHasPlayedStartEvent),
+		bHasPlayedCompleteEvent(Other.bHasPlayedCompleteEvent),
+		EasingType(Other.EasingType),
+		WidgetPtr(Other.WidgetPtr),
+		Delay(Other.Delay),
+		EasedAlpha(Other.EasedAlpha),
+		Alpha(Other.Alpha),
+		Duration(Other.Duration),
+		Entity(Other.Entity),
+		EasingParam(Other.EasingParam),
+		OnStartedDelegate(Other.OnStartedDelegate),
+		OnCompleteDelegate(Other.OnCompleteDelegate),
+		OnStartedBPDelegate(Other.OnStartedBPDelegate),
+		OnCompleteBPDelegate(Other.OnCompleteBPDelegate)
+	{
+		UBUITween::GetPoolManager().SetEntityData(Entity, this);
+		Other.Entity = FBUIPoolManager::INVALID_ENTITY;
+	}
+
+	FBUITweenInstance& operator=(FBUITweenInstance&&) = default;
+
+	FBUITweenInstance(UWidget* Widget, float InDuration, float InDelay = 0.f)
+		: WidgetPtr(Widget),
+		Delay(InDelay),
+		Duration(InDuration),
+		Entity(UBUITween::GetPoolManager().GetEntityHandle())
+	{
+		ensure(Widget != nullptr);
+	}
+
+	void Begin()
+	{
+		bShouldUpdateInstance = true;
+		SetShouldUpdateComponents(true);
+
+		UBUITween::GetPoolManager().EntityBegin(Entity);
+		UBUITween::GetPoolManager().Apply(Entity);
+	}
+
+	void SetShouldUpdateComponents(const bool NewValue)
+	{
+		if (bShouldUpdateComponents != NewValue)
+		{
+			bShouldUpdateComponents = NewValue;
+			UBUITween::GetPoolManager().SetEntityActive(Entity, NewValue);
+		}
+	}
+
+	void PreComponentsUpdate(float InDeltaTime)
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE_STR("FBUITweenInstance::PreComponentsUpdate");
+		// Not called Begin() yet
+		if ( !bShouldUpdateInstance && !bIsComplete )
+		{
+			return;
+		}
+		// Widget became invalid - no things to do
+		if ( !WidgetPtr.IsValid() )
+		{
+			bIsComplete = true;
+			SetShouldUpdateComponents(false);
+			return;
+		}
+		// If completed but occasionally called again
+		if (bIsComplete)
+		{
+			ensure(false);
+			SetShouldUpdateComponents(false);
+			return;
+		}
+
+		if ( Delay > 0 )
+		{
+			// TODO could correctly subtract from deltatime and use remaining on alpha but meh
+			Delay -= InDeltaTime;
+			SetShouldUpdateComponents(false);
+			return;
+		}
+		else if (bShouldUpdateComponents == false && Delay <= 0)
+		{
+			SetShouldUpdateComponents(true);
+		}
+
+		if ( !bHasPlayedStartEvent )
+		{
+			OnStartedDelegate.ExecuteIfBound( WidgetPtr.Get() );
+			OnStartedBPDelegate.ExecuteIfBound( WidgetPtr.Get() );
+			bHasPlayedStartEvent = true;
+		}
+
+		Alpha += InDeltaTime;
+		if ( Alpha >= Duration )
+		{
+			Alpha = Duration;
+			bIsComplete = true;
+		}
+
+		EasedAlpha = EasingParam.IsSet()
+			? FBUIEasing::Ease( EasingType, Alpha, Duration, EasingParam.GetValue() )
+			: FBUIEasing::Ease( EasingType, Alpha, Duration );
+
+		return;
+	}
+
+	void PostComponentsUpdate()
+	{
+		TRACE_CPUPROFILER_EVENT_SCOPE_STR("FBUITweenInstance::PostComponentsUpdate");
+		for (auto& Action : PostActionsMap)
+		{
+			TUniquePtr<BUIPostActionsBase>& PostAction = Action.Value;
+			if (PostAction->IsSet())
+			{
+				Action.Value->ApplyAction();
+				Action.Value->Reset();
+			}
+		}
+	}
 
 	inline bool operator==( const FBUITweenInstance& other) const
 	{
-		return pWidget == other.pWidget;
+		return WidgetPtr == other.WidgetPtr;
 	}
 	bool IsComplete() const { return bIsComplete; }
 
@@ -173,191 +351,78 @@ public:
 		return *this;
 	}
 
-	FBUITweenInstance& ToTranslation( const FVector2D& InTarget )
+	template<typename TweenComponent>
+	FBUITweenInstance& SetTween(TweenComponent&& Component)
 	{
-		TranslationProp.SetTarget( InTarget );
-		return *this;
-	}
-	FBUITweenInstance& ToTranslation( float X, float Y )
-	{
-		TranslationProp.SetTarget( FVector2D( X, Y ) );
-		return *this;
-	}
-	FBUITweenInstance& FromTranslation( const FVector2D& InStart )
-	{
-		TranslationProp.SetStart( InStart );
-		return *this;
-	}
-	FBUITweenInstance& FromTranslation( float X, float Y )
-	{
-		TranslationProp.SetStart( FVector2D( X, Y ) );
+		Component.Instance = this;
+		UBUITween::GetPoolManager().Add(Entity, std::forward<TweenComponent>(Component));
 		return *this;
 	}
 
-	FBUITweenInstance& ToScale( const FVector2D& InTarget )
-	{
-		ScaleProp.SetTarget( InTarget );
-		return *this;
-	}
-	FBUITweenInstance& FromScale( const FVector2D& InStart )
-	{
-		ScaleProp.SetStart( InStart );
-		return *this;
-	}
-
-	FBUITweenInstance& ToOpacity( float InTarget )
-	{
-		OpacityProp.SetTarget( InTarget );
-		return *this;
-	}
-	FBUITweenInstance& FromOpacity( float InStart )
-	{
-		OpacityProp.SetStart( InStart );
-		return *this;
-	}
-
-	FBUITweenInstance& ToColor( const FLinearColor& InTarget )
-	{
-		ColorProp.SetTarget( InTarget );
-		return *this;
-	}
-	FBUITweenInstance& FromColor( const FLinearColor& InStart )
-	{
-		ColorProp.SetStart( InStart );
-		return *this;
-	}
-
-	FBUITweenInstance& ToRotation( float InTarget )
-	{
-		RotationProp.SetTarget( InTarget );
-		return *this;
-	}
-	FBUITweenInstance& FromRotation( float InStart )
-	{
-		RotationProp.SetStart( InStart );
-		return *this;
-	}
-
-	FBUITweenInstance& ToMaxDesiredHeight( float InTarget )
-	{
-		MaxDesiredHeightProp.SetTarget( InTarget );
-		return *this;
-	}
-	FBUITweenInstance& FromMaxDesiredHeight( float InStart )
-	{
-		MaxDesiredHeightProp.SetStart( InStart );
-		return *this;
-	}
-
-	FBUITweenInstance& ToCanvasPosition( FVector2D InTarget )
-	{
-		CanvasPositionProp.SetTarget( InTarget );
-		return *this;
-	}
-	FBUITweenInstance& FromCanvasPosition( FVector2D InStart )
-	{
-		CanvasPositionProp.SetStart( InStart );
-		return *this;
-	}
-
-	FBUITweenInstance& ToPadding( const FMargin& InTarget )
-	{
-		PaddingProp.SetTarget( FVector4( InTarget.Left, InTarget.Top, InTarget.Right, InTarget.Bottom ) );
-		return *this;
-	}
-	FBUITweenInstance& FromPadding( const FMargin& InStart )
-	{
-		PaddingProp.SetStart( FVector4( InStart.Left, InStart.Top, InStart.Right, InStart.Bottom ) );
-		return *this;
-	}
-
-
-	FBUITweenInstance& ToVisibility( ESlateVisibility InTarget )
-	{
-		VisibilityProp.SetTarget( InTarget );
-		return *this;
-	}
-	FBUITweenInstance& FromVisibility( ESlateVisibility InStart )
-	{
-		VisibilityProp.SetStart( InStart );
-		return *this;
-	}
-
-	FBUITweenInstance& OnStart( const FBUITweenSignature& InOnStart )
+	FBUITweenInstance& SetOnStartDelegate( const FBUITweenSignature& InOnStart )
 	{
 		OnStartedDelegate = InOnStart;
 		return *this;
 	}
-	FBUITweenInstance& OnComplete( const FBUITweenSignature& InOnComplete )
+
+	FBUITweenInstance& SetOnCompleteDelegate(const FBUITweenSignature& InOnComplete)
 	{
 		OnCompleteDelegate = InOnComplete;
 		return *this;
 	}
 
-	FBUITweenInstance& OnStart( const FBUITweenBPSignature& InOnStart )
+	FBUITweenInstance& SetOnStartDelegate( const FBUITweenBPSignature& InOnStart )
 	{
 		OnStartedBPDelegate = InOnStart;
 		return *this;
 	}
-	FBUITweenInstance& OnComplete( const FBUITweenBPSignature& InOnComplete )
+	FBUITweenInstance& SetOnCompleteDelegate( const FBUITweenBPSignature& InOnComplete )
 	{
 		OnCompleteBPDelegate = InOnComplete;
 		return *this;
 	}
 
-	FBUITweenInstance& ToReset()
-	{
-		ScaleProp.SetTarget( FVector2D::UnitVector );
-		OpacityProp.SetTarget( 1 );
-		TranslationProp.SetTarget( FVector2D::ZeroVector );
-		ColorProp.SetTarget( FLinearColor::White );
-		RotationProp.SetTarget( 0 );
-		return *this;
-	}
-
-	TWeakObjectPtr<UWidget> GetWidget() const { return pWidget; }
+	TWeakObjectPtr<UWidget> GetWidget() const { return WidgetPtr; }
 
 	void DoCompleteCleanup()
 	{
 		if ( !bHasPlayedCompleteEvent )
 		{
-			OnCompleteDelegate.ExecuteIfBound( pWidget.Get() );
-			OnCompleteBPDelegate.ExecuteIfBound( pWidget.Get() );
+			OnCompleteDelegate.ExecuteIfBound( WidgetPtr.Get() );
+			OnCompleteBPDelegate.ExecuteIfBound( WidgetPtr.Get() );
 			bHasPlayedCompleteEvent = true;
 		}
+		UBUITween::GetPoolManager().RemoveEntity(Entity);
+		Entity = FBUIPoolManager::INVALID_ENTITY;
 	}
 
-protected:
-	bool bShouldUpdate = false;
-	bool bIsComplete = false;
+public:
+	using TypeIndex = BUIDetails::TypeIndexer::TypeIndex;
+	TMap<TypeIndex, TUniquePtr<BUIPostActionsBase>> PostActionsMap;
 
-	TWeakObjectPtr<UWidget> pWidget = nullptr;
-	float Alpha = 0;
-	float Duration = 1;
-	float Delay = 0;
+	bool bShouldUpdateInstance = false;
+	bool bShouldUpdateComponents = false;
+	bool bIsComplete = false;
+	bool bHasPlayedStartEvent = false;
+	bool bHasPlayedCompleteEvent = false;
+
+public:
 
 	EBUIEasingType EasingType = EBUIEasingType::InOutQuad;
+
+	TWeakObjectPtr<UWidget> WidgetPtr = nullptr;
+
+	float Delay = 0.f;
+	float EasedAlpha = 0.f;
+	float Alpha = 0.f;
+	float Duration = 1.f;
+	FBUIPoolManager::EntityHandle Entity;
 	TOptional<float> EasingParam;
 
-	TBUITweenProp<FVector2D> TranslationProp;
-	TBUITweenProp<FVector2D> ScaleProp;
-	TBUITweenProp<FLinearColor> ColorProp;
-	TBUITweenProp<float> OpacityProp;
-	TBUITweenProp<float> RotationProp;
-	TBUITweenProp<FVector2D> CanvasPositionProp;
-	TBUITweenProp<FVector4> PaddingProp; // FVector4 because FMath::Lerp does not support FMargin
-	TBUITweenInstantProp<ESlateVisibility> VisibilityProp;
-	TBUITweenProp<float> MaxDesiredHeightProp;
 
 	FBUITweenSignature OnStartedDelegate;
 	FBUITweenSignature OnCompleteDelegate;
 
 	FBUITweenBPSignature OnStartedBPDelegate;
 	FBUITweenBPSignature OnCompleteBPDelegate;
-
-	bool bHasPlayedStartEvent = false;
-	bool bHasPlayedCompleteEvent = false;
 };
-
-
-

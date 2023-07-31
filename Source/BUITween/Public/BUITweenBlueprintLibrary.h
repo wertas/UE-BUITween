@@ -1,7 +1,8 @@
 #pragma once
 
 #include "BUITween.h"
-#include "BUITweenInstanceNew.h"
+#include "BUITweenInstance.h"
+#include "BUITweenComponents.h"
 #include "BUITweenBlueprintLibrary.generated.h"
 
 
@@ -12,7 +13,7 @@ class BUITWEEN_API UBUIParamChain : public UObject
 
 public:
 
-	FBUITweenInstance2* TweenInstance;
+	FBUITweenInstance* TweenInstance;
 };
 
 
@@ -33,7 +34,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = UITween)
 	static UBUIParamChain* CreateTweenAnimationParams(UWidget* InWidget, const float InDuration = 1.0f, const float InDelay = 0.0f, const bool bIsAdditive = false)
 	{
-		FBUITweenInstance2& Tween = UBUITween::Create(InWidget, InDuration, InDelay, bIsAdditive);
+		FBUITweenInstance& Tween = UBUITween::Create(InWidget, InDuration, InDelay, bIsAdditive);
 		UBUIParamChain* Params = NewObject<UBUIParamChain>(GetTransientPackage(), NAME_None, RF_MarkAsRootSet);
 		Params->TweenInstance = &Tween;
 		return Params;
@@ -43,6 +44,20 @@ public:
 	static UBUIParamChain* SetTranslationTween(UBUIParamChain* Previous, const FVector2D& InStart, const FVector2D& InTarget)
 	{
 		Previous->TweenInstance->SetTween(BUITweenComponents::BUITranslationTween().From(InStart).To(InTarget));
+		return Previous;
+	}
+
+	UFUNCTION(BlueprintPure, Category = UITween)
+	static UBUIParamChain* SetRotationTween(UBUIParamChain* Previous, const float InStart, const float InTarget)
+	{
+		Previous->TweenInstance->SetTween(BUITweenComponents::BUIRotationTween().From(InStart).To(InTarget));
+		return Previous;
+	}
+
+	UFUNCTION(BlueprintPure, Category = UITween)
+	static UBUIParamChain* SetScaleTween(UBUIParamChain* Previous, const FVector2D& InStart, const FVector2D& InTarget)
+	{
+		Previous->TweenInstance->SetTween(BUITweenComponents::BUIScaleTween().From(InStart).To(InTarget));
 		return Previous;
 	}
 
